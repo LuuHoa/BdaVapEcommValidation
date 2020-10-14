@@ -1,5 +1,6 @@
 package com.fis.ecomm.validation
 
+
 import org.apache.spark.sql.SparkSession
 
 import java.time.LocalDate
@@ -131,7 +132,7 @@ object BdaVapValidation {
          LEFT JOIN vaprun t2
          ON t1.table_name = t2.table_name""".stripMargin
 
-        printf("query_rerun: %s",query_rerun)
+        printf("query_rerun: %s\n",query_rerun)
         val vap_vs_bda_count_df = spark.sql(query_rerun)
         
         vap_vs_bda_count_df.write.mode("append").parquet(target_path+"extract_date="+current_date_formatted)
@@ -139,6 +140,8 @@ object BdaVapValidation {
         val end_time = new Timestamp(System.currentTimeMillis()).toString
         
         printf("BdaVapValidation::job for table %s is completed at %s", table_name, end_time)
+        
+        save_failed_data()
       } catch {
         case e: Throwable =>
           println(e)
@@ -156,18 +159,20 @@ object BdaVapValidation {
     
 
         def save_failed_data()(): Unit = {
-            println("Start to save failed record ")
-            var bda_count_failed_df= Seq((1,2,3,4,5,6,"application_id "+application_id, table_id, table_name, count_date,  null.asInstanceOf[Long], runtime_sql)).toDF("gdg_position", "gdg_txoppos", "gdg_txind", "gdg_opcode", "gdg_timestamp", "gdg_schema", "gdg_table", "id", "table_name", "count_date", "bda_count", "runtime_sql"+" has failed")
+            println("Start to save failed record into target bda_data_counts_validation")
+            
+            var bda_count_failed_df= Seq((1,2,3,4,5,6,"application_id "+application_id, table_id, table_name, count_date,  null , runtime_sql+" has failed")).toDF("gdg_position", "gdg_txoppos", "gdg_txind", "gdg_opcode", "gdg_timestamp", "gdg_schema", "gdg_table", "id", "table_name", "count_date", "bda_count", "runtime_sql")
             bda_count_failed_df.createOrReplaceTempView("vw_bda_count_df")
             printf("query_rerun: %s",query_rerun)
             val vap_vs_bda_count_failed_df = spark.sql(query_rerun)
             vap_vs_bda_count_failed_df.write.mode("append").parquet(target_path+"extract_date="+current_date_formatted)
             
-            println("Save record into audit.bda_tables_sumrz_data is completed.")
+            println("Save failed-record into target bda_data_counts_validation is completed.")
           }
    
   
   }
 
 }
+
 
