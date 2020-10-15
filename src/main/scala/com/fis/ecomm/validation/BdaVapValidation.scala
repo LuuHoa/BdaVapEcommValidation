@@ -139,9 +139,11 @@ object BdaVapValidation {
         
         val end_time = new Timestamp(System.currentTimeMillis()).toString
         
+        spark.sql("MSCK REPAIR TABLE "+schema+".bda_data_counts_validation;")
+        
         printf("BdaVapValidation::job for table %s is completed at %s", table_name, end_time)
         
-        save_failed_data()
+        
       } catch {
         case e: Throwable =>
           println(e)
