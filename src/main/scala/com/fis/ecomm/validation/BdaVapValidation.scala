@@ -21,7 +21,6 @@ object BdaVapValidation {
     var table_id=""
     var table_name=""
     var count_date=""
-    var current_date=java.time.LocalDate.now.toString
     var bda_count = 0L
     var runtime_sql=""
     var query_rerun=""
@@ -42,7 +41,7 @@ object BdaVapValidation {
       println("Option 1:RunDate tableID CountDate")
       return
     }
-    val current_date_formatted = LocalDate.parse(run_date, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+    val run_date_formatted = LocalDate.parse(run_date, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
 
 
 
@@ -79,7 +78,7 @@ object BdaVapValidation {
       { num_days = ANYnum_days.toString.toInt }
       date_column_name = row_confsql.getString(3)
       if (count_date==""){
-        count_date=current_date_formatted.minusDays(num_days).toString
+        count_date=run_date_formatted.minusDays(num_days).toString
       }
       printf("table Id: %s - %s - count_date: %s ", table_id, table_name, count_date)
       runtime_sql = row_confsql.getString(2).replace("{var1}", "'"+ count_date +"'")
@@ -95,10 +94,9 @@ object BdaVapValidation {
 
         }
         import spark.implicits._
-        var bda_count_df= Seq((1,2,3,4,5,6,7, table_id, table_name, count_date,  bda_count, runtime_sql)).toDF("gdg_position", "gdg_txoppos", "gdg_txind", "gdg_opcode", "gdg_timestamp", "gdg_schema", "gdg_table", "id", "table_name", "count_date", "bda_count", "runtime_sql")
+        var bda_count_df= Seq((1,1,1,1,1,1,"application_id "+application_id, table_id, table_name, count_date,  bda_count, runtime_sql)).toDF("gdg_position", "gdg_txoppos", "gdg_txind", "gdg_opcode", "gdg_timestamp", "gdg_schema", "gdg_table", "id", "table_name", "count_date", "bda_count", "runtime_sql")
 
         bda_count_df.createOrReplaceTempView("vw_bda_count_df")
-
 
         query_rerun = """
         WITH vaprun as (
@@ -134,13 +132,10 @@ object BdaVapValidation {
 
         printf("query_rerun: %s\n",query_rerun)
         val vap_vs_bda_count_df = spark.sql(query_rerun)
-
-        vap_vs_bda_count_df.write.mode("append").parquet(target_path+"extract_date="+current_date_formatted)
+        vap_vs_bda_count_df.write.mode("append").parquet(target_path+"extract_date="+run_date_formatted)
+        refreshTable()
 
         val end_time = new Timestamp(System.currentTimeMillis()).toString
-
-        spark.sql("MSCK REPAIR TABLE "+schema+".bda_data_counts_validation;")
-
         printf("BdaVapValidation::job for table %s is completed at %s", table_name, end_time)
 
 
@@ -148,13 +143,15 @@ object BdaVapValidation {
         case e: Throwable =>
           println(e)
           println("Errors happended at try block 1 for "+ application_id)
-          save_failed_data()}
+          save_failed_data()
+          refreshTable()}
     }
     catch {
       case e: Throwable =>
         println(e)
         println("Errors happended at try block 2 for "+ application_id)
-        save_failed_data()}
+        save_failed_data()
+        refreshTable() }
     finally {
       spark.stop()
     }
@@ -163,20 +160,20 @@ object BdaVapValidation {
     def save_failed_data(): Unit = {
       println("Start to save failed record into target bda_data_counts_validation")
       import spark.implicits._
-      var bda_count_failed_df= Seq((1,2,3,4,5,6,"application_id "+application_id, table_id, table_name, count_date,  null , runtime_sql+" has failed")).toDF("gdg_position", "gdg_txoppos", "gdg_txind", "gdg_opcode", "gdg_timestamp", "gdg_schema", "gdg_table", "id", "table_name", "count_date", "bda_count", "runtime_sql")
+      var bda_count_failed_df= Seq((1,1,1,1,1,1,"application_id "+application_id, table_id, table_name, count_date,  null , runtime_sql+" has failed")).toDF("gdg_position", "gdg_txoppos", "gdg_txind", "gdg_opcode", "gdg_timestamp", "gdg_schema", "gdg_table", "id", "table_name", "count_date", "bda_count", "runtime_sql")
       bda_count_failed_df.createOrReplaceTempView("vw_bda_count_df")
       printf("query_rerun: %s",query_rerun)
       val vap_vs_bda_count_failed_df = spark.sql(query_rerun)
-      vap_vs_bda_count_failed_df.write.mode("append").parquet(target_path+"extract_date="+current_date_formatted)
+      vap_vs_bda_count_failed_df.write.mode("append").parquet(target_path+"extract_date="+run_date_formatted)
 
       println("Save failed-record into target bda_data_counts_validation is completed.")
     }
 
     def refreshTable():Unit = {
 
-      val addPartitionStatmt = "ALTER TABLE "+schema+".bda_data_counts_validation add if not exists partition(extract_date='"+current_date_formatted.toString+"')"
+      val addPartitionStatmt = "ALTER TABLE "+schema+".bda_data_counts_validation add if not exists partition(extract_date='"+run_date_formatted.toString+"')"
       spark.sql(addPartitionStatmt)
-      spark.sql("REFRESH TABLE "+schema+".bda_data_counts_validation)
+      spark.sql("REFRESH TABLE "+schema+".bda_data_counts_validation")
 
 
     }
